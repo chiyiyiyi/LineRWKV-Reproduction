@@ -1,0 +1,92 @@
+diff --git a/Code/linerwkv/config.py b/Code/linerwkv/config.py
+index 6e758aa..08d183a 100644
+--- a/Code/linerwkv/config.py
++++ b/Code/linerwkv/config.py
+@@ -4,34 +4,34 @@ class Config(object):
+ 
+         # trining data
+         # hyspecnet-11k
+-        self.dataset_dir = "/home/valsesia/Scripts/recurrent_space/Dataset/hyspecnet-11k/"
++        self.dataset_dir = "<DATASET_ROOT>/"
+         self.dataset_difficulty = "hard" # "easy"
+ 
+         
+         self.device = "cuda" # "cpu"
+ 
+         # architecture
+-        self.dim_enc = 64
++        self.dim_enc = 32
+         self.dropout = 0
+         # line encoder
+         self.kernel_size = 3
+-        self.N_layers_encoder = 2
++        self.N_layers_encoder = 1
+         # rwkv
+         self.n_layer_lines = 2
+         self.n_layer_bands = 2
+         self.ctx_len = 512 # max sequence length for parallel training
+-        self.dim_att = 64
+-        self.dim_ffn = 64
++        self.dim_att = 32
++        self.dim_ffn = 32
+         self.tiny_att_layer = -1
+         self.tiny_att_dim = 0    
+         # line decoder
+-        self.N_layers_decoder = 2
++        self.N_layers_decoder = 1
+         self.residual = False
+ 
+         # learning
+-        self.batch_size = 8
+-        self.pos_size = 16 # subsampling
+-        self.epoch_count = 4000
++        self.batch_size = 3
++        self.pos_size = 128 # subsampling
++        self.epoch_count = 1500
+         self.layerwise_lr = 1
+         self.weight_decay = 0
+         self.weight_decay_final = 0
+diff --git a/Code/linerwkv/dataset.py b/Code/linerwkv/dataset.py
+index 1e1718c..42b77b3 100644
+--- a/Code/linerwkv/dataset.py
++++ b/Code/linerwkv/dataset.py
+@@ -63,7 +63,7 @@ class HySpecNet11k(torch.utils.data.Dataset):
+         image = data.read(cur_channels)
+         image = image.astype(np.float32)
+         # clip data to remove uncertainties
+-        #image = np.clip(image, a_min=self.minimum_value, a_max=self.maximum_value)
++        image = np.clip(image, a_min=self.minimum_value, a_max=10000)   # paper: reflectance clipped to [0, 10000]
+         # [0,1] normalization
+         image = (image - self.minimum_value) / (self.maximum_value - self.minimum_value)
+         # standardization
+diff --git a/Code/linerwkv/train.py b/Code/linerwkv/train.py
+index fe312f8..fff53f4 100644
+--- a/Code/linerwkv/train.py
++++ b/Code/linerwkv/train.py
+@@ -6,6 +6,8 @@ import json
+ import torch
+ import pytorch_lightning as pl
+ 
++torch.backends.cudnn.benchmark = True  # fixed shapes -> autotune conv1d (no math change)
++
+ from config import Config
+ from dataset import HySpecNet11k
+ from model import LineRWKV
+@@ -30,7 +32,7 @@ config.save_dir = os.path.join(param.save_dir, str(model_time))
+ train_dataset = HySpecNet11k(config, mode='train')
+ train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=False, num_workers=8, prefetch_factor=8)
+ val_dataset = HySpecNet11k(config, mode='val')
+-val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=False, drop_last=False, num_workers=4, prefetch_factor=4)
++val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, drop_last=False, num_workers=4, prefetch_factor=4)
+ 
+ 
+ # Create Tensorboard logger
+@@ -50,7 +52,7 @@ if not os.path.exists(save_dir):
+ # Create model and train
+ model = LineRWKV(config)
+ accelerator = "gpu" if config.device=="cuda" else "cpu"
+-trainer = pl.Trainer(accelerator=accelerator, logger=logger, callbacks=[train_callback(config)])
++trainer = pl.Trainer(accelerator=accelerator, logger=logger, max_epochs=config.epoch_count, callbacks=[train_callback(config)])
+ #trainer = pl.Trainer(accelerator=accelerator, devices=4, default_root_dir=save_dir, logger=logger, max_epochs=config.N_epoch)
+ trainer.fit(model, train_loader, val_loader)
+ 

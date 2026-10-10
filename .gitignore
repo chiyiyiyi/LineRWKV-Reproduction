@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+*.mat
+*.bsq
+*.cmp
+*.h5
+!results/*.csv
+*.tmp
+.DS_Store
+Thumbs.db
